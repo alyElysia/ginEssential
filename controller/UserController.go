@@ -2,7 +2,9 @@ package controller
 
 import (
 	"ginEssential/common"
+	"ginEssential/dto"
 	"ginEssential/model"
+	"ginEssential/response"
 	"ginEssential/util"
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
@@ -12,20 +14,19 @@ import (
 
 var db = common.InitDB()
 
-func Register(context *gin.Context) {
+func Register(ctx *gin.Context) {
 
 	//获取参数
-	name := context.PostForm("name")
-	tel := context.PostForm("tel")
-	pwd := context.PostForm("pwd")
+	name := ctx.PostForm("name")
+	tel := ctx.PostForm("tel")
+	pwd := ctx.PostForm("pwd")
 	//数据验证
 	if len(tel) != 11 {
-		context.JSON(http.StatusUnprocessableEntity, gin.H{"code": 422, "msg": "手机号必须为11位"})
-		return
+		response.Response(ctx, http.StatusUnprocessableEntity, 422, nil, "手机号必须为11位")
 	}
 	if len(pwd) < 6 {
-		context.JSON(http.StatusUnprocessableEntity, gin.H{"code": 422, "msg": "密码不能少于6位"})
-		return
+		response.Response(ctx, http.StatusUnprocessableEntity, 422, nil, "密码不能少于6位")
+
 	}
 
 	//如果没有传递名称，测随机生成
@@ -35,8 +36,8 @@ func Register(context *gin.Context) {
 
 	//判断手机号是否存在
 	if isTelExist(db, tel) {
-		context.JSON(http.StatusUnprocessableEntity, gin.H{"code": 422, "msg": "该手机号已注册"})
-		return
+		response.Response(ctx, http.StatusUnprocessableEntity, 422, nil, "该手机号已注册")
+
 	}
 
 	//创建用户
@@ -44,8 +45,7 @@ func Register(context *gin.Context) {
 	//为密码加密
 	hashPwd, err := bcrypt.GenerateFromPassword([]byte(pwd), bcrypt.DefaultCost)
 	if err != nil {
-		context.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": "加密失败"})
-		return
+		response.Response(ctx, http.StatusInternalServerError, 500, nil, "加密失败")
 	}
 	newUser := model.User{
 		Name: name,
@@ -54,7 +54,7 @@ func Register(context *gin.Context) {
 	}
 	db.Create(&newUser)
 	//返回结果
-	context.JSON(200, gin.H{"msg": "注册成功"})
+	response.Success(ctx, nil, "注册成功")
 }
 
 func Login(ctx *gin.Context) {
@@ -66,27 +66,23 @@ func Login(ctx *gin.Context) {
 	//判断输入的用户名或手机号是否正确
 	//未输入用户名或手机号
 	if len(name) == 0 || len(tel) == 0 {
-		ctx.JSON(http.StatusUnprocessableEntity, gin.H{"code": 422, "msg": "用户名或手机号不能为空！"})
-		return
+		response.Response(ctx, http.StatusUnprocessableEntity, 422, nil, "用户名或手机号不能为空！")
 	}
 	//输入错误
 	var checkUser model.User
 	db.Raw("select * from users where name = ? or tel = ?;", name, tel).Scan(&checkUser)
 	if checkUser.ID == 0 {
-		ctx.JSON(http.StatusUnprocessableEntity, gin.H{"code": 422, "msg": "用户名或手机号输入错误！"})
-		return
+		response.Response(ctx, http.StatusUnprocessableEntity, 422, nil, "用户名或手机号输入错误！")
 	}
 
 	//判断密码是否正确
 	//格式不正确
 	if len(pwd) < 6 {
-		ctx.JSON(http.StatusUnprocessableEntity, gin.H{"code": 422, "msg": "密码长度必须大于6！"})
-		return
+		response.Response(ctx, http.StatusUnprocessableEntity, 422, nil, "密码长度必须大于6！")
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(checkUser.Pwd), []byte(pwd)); err != nil {
-		ctx.JSON(http.StatusNotFound, gin.H{"code": 404, "msg": "密码错误!"})
-		return
+		response.Response(ctx, http.StatusNotFound, 404, nil, "密码错误!")
 	}
 
 	//发放token
@@ -97,8 +93,8 @@ func Login(ctx *gin.Context) {
 	}
 
 	//返回结果
-	ctx.JSON(http.StatusOK, gin.H{"code": 200, "token": token, "msg": "登录成功！"})
-	return
+	response.Success(ctx, gin.H{"code": 200, "token": token}, "登录成功！")
+
 }
 
 func isTelExist(db *gorm.DB, tel string) bool {
@@ -113,5 +109,5 @@ func isTelExist(db *gorm.DB, tel string) bool {
 // Info 获取用户信息
 func Info(ctx *gin.Context) {
 	user, _ := ctx.Get("user")
-	ctx.JSON(http.StatusOK, gin.H{"code": 200, "data": gin.H{"user": user}})
+	response.Success(ctx, gin.H{"code": 200, "data": gin.H{"user": dto.GetDto(user.(model.User))}}, "用户信息获取成功")
 }
